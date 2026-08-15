@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUNDED
+}
+
+enum GatewayProvider {
+  PAYMOB
+  FAWRY
+  STRIPE
+}
+
+model PaymentIntent {
+  id               String          @id @default(uuid()) @db.Uuid
+  reference        String          @unique // Your internal system's order ID
+  amount           Decimal         @db.Decimal(12, 2)
+  currency         String          @db.VarChar(3)
+  status           PaymentStatus   @default(PENDING)
+  gateway          GatewayProvider
+  gatewayPaymentId String?         // The external ID returned from Stripe/Paymob
+  customerEmail    String
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  events           WebhookEvent[]
+}
+
+model WebhookEvent {
+  id               String          @id @default(uuid()) @db.Uuid
+  paymentIntentId  String          @db.Uuid
+  providerEventId  String          @unique // ID from the webhook payload (prevents replay attacks)
+  payload          Json            // Store the raw webhook for audit trails
+  processedAt      DateTime        @default(now())
+
+  paymentIntent    PaymentIntent   @relation(fields: [paymentIntentId], references: [id])
+}
+
+model IdempotencyKey {
+  key          String   @id
+  responseBody Json?
+  statusCode   Int?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+}

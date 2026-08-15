@@ -1,20 +1,23 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import { IPaymentProvider } from '../interfaces/payment-provider.interface';
+import {
+  IPaymentProvider,
+  PaymentIntentResult,
+} from '../interfaces/payment-provider.interface';
 import { StripeService } from '../stripe.service';
 import { PaymobService } from '../paymob.service';
 import { FawryService } from '../fawry.service';
 import { GatewayProvider } from 'generated/prisma/enums';
+import { CircuitBreakerService } from '../../common/resilience/circuit-breaker/circuit-breaker.service';
 
 @Injectable()
 export class OrchestratorService {
-  private readonly providers = new Map();
+  private readonly providers = new Map<GatewayProvider, IPaymentProvider>();
 
   constructor(
     private readonly stripeService: StripeService,
     private readonly paymobService: PaymobService,
     private readonly fawryService: FawryService,
+    private readonly circuitBreaker: CircuitBreakerService,
   ) {
     // Register the active strategies
     this.providers.set(GatewayProvider.STRIPE, this.stripeService);
@@ -31,5 +34,34 @@ export class OrchestratorService {
       );
     }
     return provider;
+  }
+  /**
+   * Safely executes a payment intent creation wrapped in a Circuit Breaker.
+   */
+  async safeCreateIntent(
+    gateway: GatewayProvider,
+    amount: number,
+    currency: string,
+    reference: string,
+  ): Promise<PaymentIntentResult> {
+    const provider = this.providers.get(gateway);
+
+    if (!provider) {
+      throw new InternalServerErrorException(
+        `Gateway ${gateway} is not supported`,
+      );
+    }
+
+    // We bind the context of the provider to ensure 'this' behaves correctly inside the wrapped function
+    const action = provider.createIntent.bind(provider);
+
+    // Fire the action through the circuit breaker specifically assigned to this gateway
+    return this.circuitBreaker.fire(
+      gateway,
+      action,
+      amount,
+      currency,
+      reference,
+    );
   }
 }

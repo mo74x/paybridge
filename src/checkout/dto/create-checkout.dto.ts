@@ -4,6 +4,8 @@ import {
   IsString,
   IsEmail,
   IsEnum,
+  IsOptional,
+  IsUrl,
   Min,
   Length,
 } from 'class-validator';
@@ -25,4 +27,8 @@ export class CreateCheckoutSessionDto {
     message: 'Gateway must be one of: PAYMOB, STRIPE, FAWRY',
   })
   gateway: GatewayProvider;
+
+  @IsOptional()
+  @IsUrl({}, { message: 'webhookUrl must be a valid URL' })
+  webhookUrl?: string;
 }

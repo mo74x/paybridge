@@ -6,6 +6,7 @@ import { ResilienceModule } from './common/resilience/resilience.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { CheckoutModule } from './checkout/checkout.module';
+import { OutboundWebhooksModule } from './outbound-webhooks/outbound-webhooks.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { CheckoutModule } from './checkout/checkout.module';
     ResilienceModule,
     WebhooksModule,
     CheckoutModule,
+    OutboundWebhooksModule,
   ],
   controllers: [AppController],
   providers: [AppService],

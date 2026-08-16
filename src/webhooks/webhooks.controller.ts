@@ -6,6 +6,7 @@ import type { Request, Response } from 'express';
 import { GatewayProvider } from '../../generated/prisma/enums';
 import { OrchestratorService } from '../providers/orchestrator/orchestrator.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { OutboundWebhooksService } from '../outbound-webhooks/outbound-webhooks.service';
 
 @common.Controller('api/v1/webhooks')
 export class WebhooksController {
@@ -14,6 +15,7 @@ export class WebhooksController {
   constructor(
     private readonly orchestrator: OrchestratorService,
     private readonly prisma: PrismaService,
+    private readonly outboundWebhooks: OutboundWebhooksService,
   ) {}
 
   @common.Post(':gateway')
@@ -70,7 +72,7 @@ export class WebhooksController {
       // Database-Level Idempotency (Replay Protection)
       // By using an interactive transaction and attempting to create the event record,
       // the PostgreSQL unique constraint on 'providerEventId' guarantees we only process this once.
-      await this.prisma.$transaction(async (tx) => {
+      const updatedIntent = await this.prisma.$transaction(async (tx) => {
         // Attempt to record the event. If it exists, Prisma throws a P2002 Unique Constraint error.
         await tx.webhookEvent.create({
           data: {
@@ -82,7 +84,7 @@ export class WebhooksController {
 
         // If the insert succeeds, we know this is a brand new event.
         // We can safely update the business logic.
-        await tx.paymentIntent.update({
+        return await tx.paymentIntent.update({
           where: { id: paymentIntentId },
           data: { status: 'CAPTURED' },
         });
@@ -91,6 +93,18 @@ export class WebhooksController {
       this.logger.log(
         `✅ Webhook processed successfully for Intent: ${paymentIntentId}`,
       );
+
+      // Asynchronously dispatch outbound webhook to notify the merchant via BullMQ queue
+      await this.outboundWebhooks.dispatchPaymentEvent('payment.succeeded', {
+        id: updatedIntent.id,
+        reference: updatedIntent.reference,
+        amount: Number(updatedIntent.amount),
+        currency: updatedIntent.currency,
+        status: updatedIntent.status,
+        gateway: updatedIntent.gateway,
+        customerEmail: updatedIntent.customerEmail,
+        gatewayPaymentId: updatedIntent.gatewayPaymentId,
+      });
 
       // Always return a 200 immediately to stop the provider from retrying
       return res.status(200).send({ received: true });

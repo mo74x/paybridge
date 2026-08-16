@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { WebhooksController } from './webhooks.controller';
 import { OrchestratorService } from '../providers/orchestrator/orchestrator.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { OutboundWebhooksService } from '../outbound-webhooks/outbound-webhooks.service';
 
 describe('WebhooksController', () => {
   let controller: WebhooksController;
@@ -20,6 +21,12 @@ describe('WebhooksController', () => {
           provide: PrismaService,
           useValue: {
             $transaction: jest.fn(),
+          },
+        },
+        {
+          provide: OutboundWebhooksService,
+          useValue: {
+            dispatchPaymentEvent: jest.fn(),
           },
         },
       ],

@@ -5,9 +5,16 @@ import { ProvidersModule } from './providers/providers.module';
 import { ResilienceModule } from './common/resilience/resilience.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { CheckoutModule } from './checkout/checkout.module';
 
 @Module({
-  imports: [PrismaModule, ProvidersModule, ResilienceModule, WebhooksModule],
+  imports: [
+    PrismaModule,
+    ProvidersModule,
+    ResilienceModule,
+    WebhooksModule,
+    CheckoutModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

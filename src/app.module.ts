@@ -11,6 +11,7 @@ import { AuthModule } from './common/auth/auth.module';
 import { IdempotencyModule } from './common/idempotency/idempotency.module';
 import { ReconciliationModule } from './reconciliation/reconciliation.module';
 import { RefundsModule } from './refunds/refunds.module';
+import { RoutingModule } from './routing/routing.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { RefundsModule } from './refunds/refunds.module';
     IdempotencyModule,
     ReconciliationModule,
     RefundsModule,
+    RoutingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

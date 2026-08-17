@@ -1,6 +1,10 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrchestratorService } from '../providers/orchestrator/orchestrator.service';
+import { SmartRoutingService } from '../routing/smart-routing.service';
 import { CreateCheckoutSessionDto } from './dto/create-checkout.dto';
 import * as crypto from 'crypto';
 
@@ -11,42 +15,52 @@ export class CheckoutService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly orchestrator: OrchestratorService,
+    private readonly smartRouting: SmartRoutingService,
   ) {}
 
   async createSession(dto: CreateCheckoutSessionDto) {
     // Generate a unique internal idempotency/reference key
-    // In a real e-commerce app, this would be the Order ID passed from the client
     const reference = `ORD-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
 
-    this.logger.log(`Initiating checkout for ${reference} via ${dto.gateway}`);
+    // 1. Resolve candidate gateway chain via Smart Routing Engine
+    const routingResult = this.smartRouting.resolveRoute({
+      amount: dto.amount,
+      currency: dto.currency,
+      preferredGateway: dto.gateway,
+      strategy: dto.routingStrategy,
+    });
 
-    // Safely call the gateway using the Circuit Breaker
-    // If the provider is down, this throws instantly and bypasses the DB write
-    const providerResult = await this.orchestrator.safeCreateIntent(
-      dto.gateway,
+    this.logger.log(
+      `Initiating checkout session for ${reference} (${dto.amount} ${dto.currency.toUpperCase()}) with candidate route: [${routingResult.candidates.join(' -> ')}]`,
+    );
+
+    // 2. Safely call the gateway using Circuit Breaker with Automatic Failover
+    const execution = await this.orchestrator.safeCreateIntentWithFallback(
+      routingResult.candidates,
       dto.amount,
       dto.currency,
       reference,
     );
 
-    // Persist the PENDING intent to the database
+    // 3. Persist the PENDING intent to the database with the ACTUAL executed gateway
     const paymentIntent = await this.prisma.paymentIntent.create({
       data: {
         reference,
         amount: dto.amount,
         currency: dto.currency.toUpperCase(),
-        gateway: dto.gateway,
+        gateway: execution.gateway,
         customerEmail: dto.customerEmail,
-        gatewayPaymentId: providerResult.gatewayPaymentId,
+        gatewayPaymentId: execution.result.gatewayPaymentId,
         status: 'PENDING',
       },
     });
 
-    // Return the client secret so the frontend can render the payment form/iframe
+    // 4. Return checkout details along with the resolved gateway
     return {
       intentId: paymentIntent.id,
       reference: paymentIntent.reference,
-      clientSecret: providerResult.clientSecret,
+      gateway: execution.gateway,
+      clientSecret: execution.result.clientSecret,
     };
   }
 }

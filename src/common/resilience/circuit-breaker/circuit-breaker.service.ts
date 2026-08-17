@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
+
 import {
   Injectable,
   Logger,
@@ -72,5 +72,33 @@ export class CircuitBreakerService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Checks whether the circuit breaker for a given gateway is currently closed or half-open (available).
+   */
+  isAvailable(gateway: GatewayProvider): boolean {
+    const breaker = this.breakers.get(gateway);
+    if (!breaker) {
+      return true;
+    }
+    return !breaker.opened;
+  }
+
+  /**
+   * Returns the current status of the circuit breaker for the given gateway.
+   */
+  getBreakerStatus(gateway: GatewayProvider): 'OPEN' | 'HALF_OPEN' | 'CLOSED' {
+    const breaker = this.breakers.get(gateway);
+    if (!breaker) {
+      return 'CLOSED';
+    }
+    if (breaker.opened) {
+      return 'OPEN';
+    }
+    if (breaker.halfOpen) {
+      return 'HALF_OPEN';
+    }
+    return 'CLOSED';
   }
 }

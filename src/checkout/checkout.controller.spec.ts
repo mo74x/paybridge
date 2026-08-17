@@ -55,6 +55,7 @@ describe('CheckoutController', () => {
     const expectedResult = {
       intentId: 'uuid-123',
       reference: 'ORD-123',
+      gateway: GatewayProvider.STRIPE,
       clientSecret: 'secret_abc',
     };
 

@@ -1,4 +1,10 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import {
   GatewayPaymentStatus,
   IPaymentProvider,
@@ -13,7 +19,9 @@ import { CircuitBreakerService } from '../../common/resilience/circuit-breaker/c
 
 @Injectable()
 export class OrchestratorService {
+  private readonly logger = new Logger(OrchestratorService.name);
   private readonly providers = new Map<GatewayProvider, IPaymentProvider>();
+  safeCreateIntentWithFallback: any;
 
   constructor(
     private readonly stripeService: StripeService,

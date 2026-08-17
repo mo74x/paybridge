@@ -10,6 +10,7 @@ import {
   Length,
 } from 'class-validator';
 import { GatewayProvider } from '../../../generated/prisma/enums';
+import { RoutingStrategy } from '../../routing/routing.types';
 
 export class CreateCheckoutSessionDto {
   @IsNumber()
@@ -23,10 +24,18 @@ export class CreateCheckoutSessionDto {
   @IsEmail()
   customerEmail: string;
 
+  @IsOptional()
   @IsEnum(GatewayProvider, {
     message: 'Gateway must be one of: PAYMOB, STRIPE, FAWRY',
   })
-  gateway: GatewayProvider;
+  gateway?: GatewayProvider;
+
+  @IsOptional()
+  @IsEnum(RoutingStrategy, {
+    message:
+      'routingStrategy must be one of: CURRENCY_OPTIMIZED, FEE_OPTIMIZED, LOWEST_LATENCY',
+  })
+  routingStrategy?: RoutingStrategy;
 
   @IsOptional()
   @IsUrl({}, { message: 'webhookUrl must be a valid URL' })

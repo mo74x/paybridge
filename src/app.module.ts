@@ -12,6 +12,8 @@ import { IdempotencyModule } from './common/idempotency/idempotency.module';
 import { ReconciliationModule } from './reconciliation/reconciliation.module';
 import { RefundsModule } from './refunds/refunds.module';
 import { RoutingModule } from './routing/routing.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { RoutingModule } from './routing/routing.module';
     ReconciliationModule,
     RefundsModule,
     RoutingModule,
+    AnalyticsModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

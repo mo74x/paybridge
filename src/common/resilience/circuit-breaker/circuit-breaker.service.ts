@@ -101,4 +101,18 @@ export class CircuitBreakerService {
     }
     return 'CLOSED';
   }
+
+  /**
+   * Returns a status map of all supported gateways.
+   */
+  getAllBreakersStatus(): Record<
+    GatewayProvider,
+    'OPEN' | 'HALF_OPEN' | 'CLOSED'
+  > {
+    return {
+      [GatewayProvider.STRIPE]: this.getBreakerStatus(GatewayProvider.STRIPE),
+      [GatewayProvider.PAYMOB]: this.getBreakerStatus(GatewayProvider.PAYMOB),
+      [GatewayProvider.FAWRY]: this.getBreakerStatus(GatewayProvider.FAWRY),
+    };
+  }
 }

@@ -5,6 +5,7 @@ import {
   GatewayPaymentStatus,
   IPaymentProvider,
   PaymentIntentResult,
+  RefundResult,
 } from './interfaces/payment-provider.interface';
 
 @Injectable()
@@ -43,11 +44,37 @@ export class PaymobService implements IPaymentProvider {
       `Polling Paymob Transaction Inquiry API for order: ${gatewayPaymentId}`,
     );
 
-    // Mocking Paymob transaction lookup: GET /api/acceptance/transactions/{id}
     if (gatewayPaymentId.includes('fail')) {
       return 'FAILED';
     }
     return 'CAPTURED';
+  }
+
+  async refund(
+    gatewayPaymentId: string,
+    amount: number,
+    currency: string,
+    reason?: string,
+  ): Promise<RefundResult> {
+    this.logger.log(
+      `Executing Paymob refund of ${amount} ${currency} for Order: ${gatewayPaymentId} (Reason: ${reason ?? 'N/A'})`,
+    );
+
+    // Mocking Paymob refund API call: POST /api/acceptance/void_refund/refund
+    const mockRefundId = `ref_paymob_${Date.now()}`;
+
+    return {
+      gatewayRefundId: mockRefundId,
+      status: 'SUCCEEDED',
+      amount,
+      currency,
+      rawResponse: {
+        id: mockRefundId,
+        success: true,
+        amount_cents: amount * 100,
+        transaction_id: gatewayPaymentId,
+      },
+    };
   }
 
   handlePaymentEvent(event: any): Promise<void> {

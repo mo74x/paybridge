@@ -3,6 +3,7 @@ import {
   GatewayPaymentStatus,
   IPaymentProvider,
   PaymentIntentResult,
+  RefundResult,
 } from '../interfaces/payment-provider.interface';
 import { StripeService } from '../stripe.service';
 import { PaymobService } from '../paymob.service';
@@ -70,5 +71,19 @@ export class OrchestratorService {
   ): Promise<GatewayPaymentStatus> {
     const provider = this.getProvider(gateway);
     return provider.fetchPaymentStatus(gatewayPaymentId);
+  }
+
+  /**
+   * Delegates refund execution to the appropriate payment provider strategy.
+   */
+  async refund(
+    gateway: GatewayProvider,
+    gatewayPaymentId: string,
+    amount: number,
+    currency: string,
+    reason?: string,
+  ): Promise<RefundResult> {
+    const provider = this.getProvider(gateway);
+    return provider.refund(gatewayPaymentId, amount, currency, reason);
   }
 }

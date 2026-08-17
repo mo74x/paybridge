@@ -5,6 +5,7 @@ import {
   GatewayPaymentStatus,
   IPaymentProvider,
   PaymentIntentResult,
+  RefundResult,
 } from './interfaces/payment-provider.interface';
 
 @Injectable()
@@ -46,11 +47,37 @@ export class FawryService implements IPaymentProvider {
       `Polling Fawry Reference Inquiry API for ref: ${gatewayPaymentId}`,
     );
 
-    // Mocking Fawry status inquiry: GET /ECommerceWeb/Fawry/payments/status/v2
     if (gatewayPaymentId.includes('fail')) {
       return 'FAILED';
     }
     return 'CAPTURED';
+  }
+
+  async refund(
+    gatewayPaymentId: string,
+    amount: number,
+    currency: string,
+    reason?: string,
+  ): Promise<RefundResult> {
+    this.logger.log(
+      `Executing Fawry refund of ${amount} ${currency} for Reference Number: ${gatewayPaymentId} (Reason: ${reason ?? 'N/A'})`,
+    );
+
+    // Mocking Fawry refund API call: POST /ECommerceWeb/Fawry/payments/refund
+    const mockRefundId = `ref_fawry_${Date.now()}`;
+
+    return {
+      gatewayRefundId: mockRefundId,
+      status: 'SUCCEEDED',
+      amount,
+      currency,
+      rawResponse: {
+        refundId: mockRefundId,
+        status: 'SUCCESS',
+        refundAmount: amount,
+        referenceNumber: gatewayPaymentId,
+      },
+    };
   }
 
   handlePaymentEvent(event: any): Promise<void> {

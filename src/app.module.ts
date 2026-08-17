@@ -10,6 +10,7 @@ import { OutboundWebhooksModule } from './outbound-webhooks/outbound-webhooks.mo
 import { AuthModule } from './common/auth/auth.module';
 import { IdempotencyModule } from './common/idempotency/idempotency.module';
 import { ReconciliationModule } from './reconciliation/reconciliation.module';
+import { RefundsModule } from './refunds/refunds.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { ReconciliationModule } from './reconciliation/reconciliation.module';
     AuthModule,
     IdempotencyModule,
     ReconciliationModule,
+    RefundsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -7,6 +7,14 @@ export interface PaymentIntentResult {
 export type GatewayPaymentStatus =
   'CAPTURED' | 'FAILED' | 'PENDING' | 'REFUNDED' | 'AUTHORIZED';
 
+export interface RefundResult {
+  gatewayRefundId: string;
+  status: 'SUCCEEDED' | 'PENDING' | 'FAILED';
+  amount: number;
+  currency: string;
+  rawResponse: any;
+}
+
 export interface IPaymentProvider {
   // Initiates a payment session with the external gateway.
   createIntent(
@@ -23,4 +31,12 @@ export interface IPaymentProvider {
 
   // Polls the external gateway API to retrieve current transaction status for reconciliation
   fetchPaymentStatus(gatewayPaymentId: string): Promise<GatewayPaymentStatus>;
+
+  // Executes a full or partial refund with the external gateway
+  refund(
+    gatewayPaymentId: string,
+    amount: number,
+    currency: string,
+    reason?: string,
+  ): Promise<RefundResult>;
 }

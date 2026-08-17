@@ -5,6 +5,7 @@ import {
   GatewayPaymentStatus,
   IPaymentProvider,
   PaymentIntentResult,
+  RefundResult,
 } from './interfaces/payment-provider.interface';
 
 @Injectable()
@@ -41,11 +42,38 @@ export class StripeService implements IPaymentProvider {
     );
 
     // Mocking stripe.paymentIntents.retrieve(gatewayPaymentId)
-    // If ID contains "fail", return FAILED; else return CAPTURED (succeeded)
     if (gatewayPaymentId.includes('fail')) {
       return 'FAILED';
     }
     return 'CAPTURED';
+  }
+
+  async refund(
+    gatewayPaymentId: string,
+    amount: number,
+    currency: string,
+    reason?: string,
+  ): Promise<RefundResult> {
+    this.logger.log(
+      `Executing Stripe refund of ${amount} ${currency} for PaymentIntent: ${gatewayPaymentId} (Reason: ${reason ?? 'N/A'})`,
+    );
+
+    // Mocking stripe.refunds.create({ payment_intent: gatewayPaymentId, amount: amount * 100 })
+    const mockRefundId = `re_stripe_${Date.now()}`;
+
+    return {
+      gatewayRefundId: mockRefundId,
+      status: 'SUCCEEDED',
+      amount,
+      currency,
+      rawResponse: {
+        id: mockRefundId,
+        object: 'refund',
+        amount,
+        status: 'succeeded',
+        payment_intent: gatewayPaymentId,
+      },
+    };
   }
 
   handlePaymentEvent(event: any): Promise<void> {

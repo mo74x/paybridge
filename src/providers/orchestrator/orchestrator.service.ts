@@ -1,5 +1,6 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import {
+  GatewayPaymentStatus,
   IPaymentProvider,
   PaymentIntentResult,
 } from '../interfaces/payment-provider.interface';
@@ -35,6 +36,7 @@ export class OrchestratorService {
     }
     return provider;
   }
+
   /**
    * Safely executes a payment intent creation wrapped in a Circuit Breaker.
    */
@@ -44,13 +46,7 @@ export class OrchestratorService {
     currency: string,
     reference: string,
   ): Promise<PaymentIntentResult> {
-    const provider = this.providers.get(gateway);
-
-    if (!provider) {
-      throw new InternalServerErrorException(
-        `Gateway ${gateway} is not supported`,
-      );
-    }
+    const provider = this.getProvider(gateway);
 
     // We bind the context of the provider to ensure 'this' behaves correctly inside the wrapped function
     const action = provider.createIntent.bind(provider);
@@ -63,5 +59,16 @@ export class OrchestratorService {
       currency,
       reference,
     );
+  }
+
+  /**
+   * Queries the external payment gateway to determine the true current status of a payment.
+   */
+  async fetchPaymentStatus(
+    gateway: GatewayProvider,
+    gatewayPaymentId: string,
+  ): Promise<GatewayPaymentStatus> {
+    const provider = this.getProvider(gateway);
+    return provider.fetchPaymentStatus(gatewayPaymentId);
   }
 }

@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/require-await */
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  GatewayPaymentStatus,
   IPaymentProvider,
   PaymentIntentResult,
 } from './interfaces/payment-provider.interface';
@@ -36,6 +37,20 @@ export class FawryService implements IPaymentProvider {
   verifyWebhookSignature(payload: any, signature: string): boolean {
     // Mocking Fawry SHA256 / HMAC callback signature verification
     return signature === 'valid-fawry-signature';
+  }
+
+  async fetchPaymentStatus(
+    gatewayPaymentId: string,
+  ): Promise<GatewayPaymentStatus> {
+    this.logger.log(
+      `Polling Fawry Reference Inquiry API for ref: ${gatewayPaymentId}`,
+    );
+
+    // Mocking Fawry status inquiry: GET /ECommerceWeb/Fawry/payments/status/v2
+    if (gatewayPaymentId.includes('fail')) {
+      return 'FAILED';
+    }
+    return 'CAPTURED';
   }
 
   handlePaymentEvent(event: any): Promise<void> {

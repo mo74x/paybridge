@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/require-await */
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  GatewayPaymentStatus,
   IPaymentProvider,
   PaymentIntentResult,
 } from './interfaces/payment-provider.interface';
@@ -30,6 +31,21 @@ export class StripeService implements IPaymentProvider {
   verifyWebhookSignature(payload: any, signature: string): boolean {
     // Mocking Stripe signature verification: stripe.webhooks.constructEvent(...)
     return signature === 'valid-stripe-signature';
+  }
+
+  async fetchPaymentStatus(
+    gatewayPaymentId: string,
+  ): Promise<GatewayPaymentStatus> {
+    this.logger.log(
+      `Polling Stripe API for PaymentIntent status: ${gatewayPaymentId}`,
+    );
+
+    // Mocking stripe.paymentIntents.retrieve(gatewayPaymentId)
+    // If ID contains "fail", return FAILED; else return CAPTURED (succeeded)
+    if (gatewayPaymentId.includes('fail')) {
+      return 'FAILED';
+    }
+    return 'CAPTURED';
   }
 
   handlePaymentEvent(event: any): Promise<void> {

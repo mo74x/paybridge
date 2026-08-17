@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/require-await */
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  GatewayPaymentStatus,
   IPaymentProvider,
   PaymentIntentResult,
 } from './interfaces/payment-provider.interface';
@@ -33,6 +34,20 @@ export class PaymobService implements IPaymentProvider {
   verifyWebhookSignature(payload: any, signature: string): boolean {
     // Mocking Paymob HMAC SHA512 verification
     return signature === 'valid-paymob-hmac';
+  }
+
+  async fetchPaymentStatus(
+    gatewayPaymentId: string,
+  ): Promise<GatewayPaymentStatus> {
+    this.logger.log(
+      `Polling Paymob Transaction Inquiry API for order: ${gatewayPaymentId}`,
+    );
+
+    // Mocking Paymob transaction lookup: GET /api/acceptance/transactions/{id}
+    if (gatewayPaymentId.includes('fail')) {
+      return 'FAILED';
+    }
+    return 'CAPTURED';
   }
 
   handlePaymentEvent(event: any): Promise<void> {

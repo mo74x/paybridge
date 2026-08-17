@@ -4,6 +4,9 @@ export interface PaymentIntentResult {
   rawResponse: any;
 }
 
+export type GatewayPaymentStatus =
+  'CAPTURED' | 'FAILED' | 'PENDING' | 'REFUNDED' | 'AUTHORIZED';
+
 export interface IPaymentProvider {
   // Initiates a payment session with the external gateway.
   createIntent(
@@ -17,4 +20,7 @@ export interface IPaymentProvider {
 
   // Handles the business logic of an incoming payment event.
   handlePaymentEvent(event: any): Promise<void>;
+
+  // Polls the external gateway API to retrieve current transaction status for reconciliation
+  fetchPaymentStatus(gatewayPaymentId: string): Promise<GatewayPaymentStatus>;
 }

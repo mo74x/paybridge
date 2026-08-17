@@ -9,6 +9,7 @@ import { CheckoutModule } from './checkout/checkout.module';
 import { OutboundWebhooksModule } from './outbound-webhooks/outbound-webhooks.module';
 import { AuthModule } from './common/auth/auth.module';
 import { IdempotencyModule } from './common/idempotency/idempotency.module';
+import { ReconciliationModule } from './reconciliation/reconciliation.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { IdempotencyModule } from './common/idempotency/idempotency.module';
     OutboundWebhooksModule,
     AuthModule,
     IdempotencyModule,
+    ReconciliationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

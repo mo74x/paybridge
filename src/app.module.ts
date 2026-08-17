@@ -7,6 +7,8 @@ import { WebhooksModule } from './webhooks/webhooks.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { CheckoutModule } from './checkout/checkout.module';
 import { OutboundWebhooksModule } from './outbound-webhooks/outbound-webhooks.module';
+import { AuthModule } from './common/auth/auth.module';
+import { IdempotencyModule } from './common/idempotency/idempotency.module';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { OutboundWebhooksModule } from './outbound-webhooks/outbound-webhooks.mo
     WebhooksModule,
     CheckoutModule,
     OutboundWebhooksModule,
+    AuthModule,
+    IdempotencyModule,
   ],
   controllers: [AppController],
   providers: [AppService],

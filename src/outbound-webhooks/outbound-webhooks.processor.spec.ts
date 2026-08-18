@@ -5,6 +5,16 @@ import { OutboundWebhooksProcessor } from './outbound-webhooks.processor';
 import { OutboundWebhookJobData } from './interfaces/outbound-webhook.interface';
 import * as crypto from 'crypto';
 
+jest.mock('bullmq', () => ({
+  Queue: jest.fn().mockImplementation(() => ({
+    add: jest.fn(),
+    close: jest.fn(),
+  })),
+  Worker: jest.fn().mockImplementation(() => ({
+    close: jest.fn(),
+  })),
+}));
+
 describe('OutboundWebhooksProcessor', () => {
   let processor: OutboundWebhooksProcessor;
 

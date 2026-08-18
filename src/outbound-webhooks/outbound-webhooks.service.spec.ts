@@ -3,6 +3,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OutboundWebhooksService } from './outbound-webhooks.service';
 
+jest.mock('bullmq', () => ({
+  Queue: jest.fn().mockImplementation(() => ({
+    add: jest.fn(),
+    close: jest.fn(),
+  })),
+  Worker: jest.fn().mockImplementation(() => ({
+    close: jest.fn(),
+  })),
+}));
+
 describe('OutboundWebhooksService', () => {
   let service: OutboundWebhooksService;
 

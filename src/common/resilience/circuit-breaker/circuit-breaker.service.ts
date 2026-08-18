@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 
@@ -8,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { GatewayProvider } from 'generated/prisma/enums';
 import CircuitBreaker from 'opossum';
-import { PaymentIntentResult } from 'src/providers/interfaces/payment-provider.interface';
+import { PaymentIntentResult } from '../../../providers/interfaces/payment-provider.interface';
 
 @Injectable()
 export class CircuitBreakerService {

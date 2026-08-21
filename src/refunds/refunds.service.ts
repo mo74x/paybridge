@@ -23,7 +23,11 @@ export class RefundsService {
     private readonly outboundWebhooks: OutboundWebhooksService,
   ) {}
 
-  async processRefund(paymentIntentId: string, dto: CreateRefundDto) {
+  async processRefund(
+    paymentIntentId: string,
+    dto: CreateRefundDto,
+    merchantId: string,
+  ) {
     this.logger.log(
       `Initiating refund for PaymentIntent: ${paymentIntentId} (Amount: ${dto.amount ?? 'FULL'})`,
     );
@@ -36,7 +40,7 @@ export class RefundsService {
       },
     });
 
-    if (!intent) {
+    if (!intent || intent.merchantId !== merchantId) {
       throw new NotFoundException(
         `Payment intent ${paymentIntentId} was not found.`,
       );
@@ -124,24 +128,28 @@ export class RefundsService {
     );
 
     // 7. Dispatch outbound webhook event: payment.refunded
-    await this.outboundWebhooks.dispatchPaymentEvent('payment.refunded', {
-      id: intent.id,
-      reference: intent.reference,
-      amount: Number(intent.amount),
-      currency: intent.currency,
-      status: isFullyRefunded ? 'REFUNDED' : 'CAPTURED',
-      gateway: intent.gateway,
-      customerEmail: intent.customerEmail,
-      gatewayPaymentId: intent.gatewayPaymentId,
-      refund: {
-        id: newRefund.id,
-        amount: requestedAmount,
-        reason: dto.reason,
-        gatewayRefundId: refundResult.gatewayRefundId,
-        status: refundResult.status,
-        remainingBalance: Math.max(0, remainingBalance - requestedAmount),
+    await this.outboundWebhooks.dispatchPaymentEvent(
+      'payment.refunded',
+      {
+        id: intent.id,
+        reference: intent.reference,
+        amount: Number(intent.amount),
+        currency: intent.currency,
+        status: isFullyRefunded ? 'REFUNDED' : 'CAPTURED',
+        gateway: intent.gateway,
+        customerEmail: intent.customerEmail,
+        gatewayPaymentId: intent.gatewayPaymentId,
+        refund: {
+          id: newRefund.id,
+          amount: requestedAmount,
+          reason: dto.reason,
+          gatewayRefundId: refundResult.gatewayRefundId,
+          status: refundResult.status,
+          remainingBalance: Math.max(0, remainingBalance - requestedAmount),
+        },
       },
-    });
+      intent.merchantId,
+    );
 
     return {
       refundId: newRefund.id,
@@ -155,13 +163,13 @@ export class RefundsService {
     };
   }
 
-  async getRefundsByIntentId(paymentIntentId: string) {
+  async getRefundsByIntentId(paymentIntentId: string, merchantId: string) {
     const intent = await this.prisma.paymentIntent.findUnique({
       where: { id: paymentIntentId },
       include: { refunds: true },
     });
 
-    if (!intent) {
+    if (!intent || intent.merchantId !== merchantId) {
       throw new NotFoundException(
         `Payment intent ${paymentIntentId} was not found.`,
       );

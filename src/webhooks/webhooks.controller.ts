@@ -95,16 +95,20 @@ export class WebhooksController {
       );
 
       // Asynchronously dispatch outbound webhook to notify the merchant via BullMQ queue
-      await this.outboundWebhooks.dispatchPaymentEvent('payment.succeeded', {
-        id: updatedIntent.id,
-        reference: updatedIntent.reference,
-        amount: Number(updatedIntent.amount),
-        currency: updatedIntent.currency,
-        status: updatedIntent.status,
-        gateway: updatedIntent.gateway,
-        customerEmail: updatedIntent.customerEmail,
-        gatewayPaymentId: updatedIntent.gatewayPaymentId,
-      });
+      await this.outboundWebhooks.dispatchPaymentEvent(
+        'payment.succeeded',
+        {
+          id: updatedIntent.id,
+          reference: updatedIntent.reference,
+          amount: Number(updatedIntent.amount),
+          currency: updatedIntent.currency,
+          status: updatedIntent.status,
+          gateway: updatedIntent.gateway,
+          customerEmail: updatedIntent.customerEmail,
+          gatewayPaymentId: updatedIntent.gatewayPaymentId,
+        },
+        updatedIntent.merchantId,
+      );
 
       // Always return a 200 immediately to stop the provider from retrying
       return res.status(200).send({ received: true });

@@ -6,7 +6,9 @@ import {
   HttpStatus,
   UseGuards,
   UseInterceptors,
+  Req,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { CheckoutService } from './checkout.service';
 import { CreateCheckoutSessionDto } from './dto/create-checkout.dto';
 import { ApiKeyGuard } from '../common/auth/api-key.guard';
@@ -20,7 +22,13 @@ export class CheckoutController {
 
   @Post('session')
   @HttpCode(HttpStatus.CREATED)
-  async createSession(@Body() createCheckoutDto: CreateCheckoutSessionDto) {
-    return this.checkoutService.createSession(createCheckoutDto);
+  async createSession(
+    @Body() createCheckoutDto: CreateCheckoutSessionDto,
+    @Req() req: Request,
+  ) {
+    return this.checkoutService.createSession(
+      createCheckoutDto,
+      req.merchant!.id,
+    );
   }
 }

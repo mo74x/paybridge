@@ -13,6 +13,7 @@ import {
   PaymentEventPayload,
   PaymentIntentData,
 } from './interfaces/outbound-webhook.interface';
+import { PrismaService } from '../prisma/prisma.service';
 
 export const OUTBOUND_WEBHOOKS_QUEUE = 'paybridge-outbound-webhooks';
 
@@ -20,6 +21,8 @@ export const OUTBOUND_WEBHOOKS_QUEUE = 'paybridge-outbound-webhooks';
 export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OutboundWebhooksService.name);
   private queue!: Queue<OutboundWebhookJobData>;
+
+  constructor(private readonly prisma: PrismaService) {}
 
   onModuleInit() {
     const redisHost = process.env.REDIS_HOST ?? 'localhost';
@@ -40,16 +43,38 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
   async dispatchPaymentEvent(
     eventType: OutboundEventType | string,
     intentData: PaymentIntentData,
+    merchantId?: string,
     targetUrl?: string,
     customSecret?: string,
   ): Promise<void> {
-    const resolvedUrl =
-      targetUrl ??
+    let resolvedUrl = targetUrl;
+    let secret = customSecret;
+
+    // If merchantId provided, look up merchant-specific webhook config
+    if (merchantId && (!resolvedUrl || !secret)) {
+      try {
+        const merchant = await this.prisma.merchant.findUnique({
+          where: { id: merchantId },
+        });
+        if (merchant) {
+          resolvedUrl = resolvedUrl ?? merchant.webhookUrl ?? undefined;
+          secret = secret ?? merchant.webhookSecret ?? undefined;
+        }
+      } catch (error: any) {
+        this.logger.warn(
+          `Failed to look up merchant ${merchantId} for webhook config: ${error.message}`,
+        );
+      }
+    }
+
+    // Fall back to environment variables
+    resolvedUrl =
+      resolvedUrl ??
       process.env.MERCHANT_WEBHOOK_URL ??
       'http://localhost:4000/webhook';
 
-    const secret =
-      customSecret ??
+    secret =
+      secret ??
       process.env.WEBHOOK_SIGNING_SECRET ??
       'pb_whsec_dev_secret_key_12345';
 
@@ -89,3 +114,4 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
     }
   }
 }
+

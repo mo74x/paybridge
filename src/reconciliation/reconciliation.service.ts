@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -95,6 +96,7 @@ export class ReconciliationService {
               customerEmail: updated.customerEmail,
               gatewayPaymentId: updated.gatewayPaymentId,
             },
+            updated.merchantId,
           );
 
           summary.captured++;
@@ -108,16 +110,20 @@ export class ReconciliationService {
             `❌ Reconciled intent ${intent.id} -> FAILED (Provider: ${intent.gateway})`,
           );
 
-          await this.outboundWebhooks.dispatchPaymentEvent('payment.failed', {
-            id: updated.id,
-            reference: updated.reference,
-            amount: Number(updated.amount),
-            currency: updated.currency,
-            status: updated.status,
-            gateway: updated.gateway,
-            customerEmail: updated.customerEmail,
-            gatewayPaymentId: updated.gatewayPaymentId,
-          });
+          await this.outboundWebhooks.dispatchPaymentEvent(
+            'payment.failed',
+            {
+              id: updated.id,
+              reference: updated.reference,
+              amount: Number(updated.amount),
+              currency: updated.currency,
+              status: updated.status,
+              gateway: updated.gateway,
+              customerEmail: updated.customerEmail,
+              gatewayPaymentId: updated.gatewayPaymentId,
+            },
+            updated.merchantId,
+          );
 
           summary.failed++;
         } else {

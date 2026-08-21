@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Request } from 'express';
+import { MerchantsService } from '../../merchants/merchants.service';
 
 export interface AuthenticatedMerchant {
   id: string;
@@ -20,7 +21,9 @@ declare module 'express' {
 
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
+  constructor(private readonly merchantsService: MerchantsService) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
 
     // Extract API key from 'x-api-key' or 'Authorization: Bearer <key>'
@@ -38,18 +41,21 @@ export class ApiKeyGuard implements CanActivate {
       );
     }
 
-    const masterKey =
-      process.env.DEV_MASTER_API_KEY ?? 'pb_test_live_key_998877';
+    // Look up the merchant by hashed API key
+    const merchant = await this.merchantsService.findMerchantByApiKey(apiKey);
 
-    // Validate the API key
-    if (apiKey !== masterKey) {
+    if (!merchant) {
       throw new UnauthorizedException('Invalid API key.');
+    }
+
+    if (!merchant.isActive) {
+      throw new UnauthorizedException('Merchant account is deactivated.');
     }
 
     // Attach merchant context to the request for downstream controllers
     request.merchant = {
-      id: 'mch_master_default',
-      name: 'Default Merchant',
+      id: merchant.id,
+      name: merchant.name,
       key: apiKey,
     };
 

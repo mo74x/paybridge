@@ -18,7 +18,7 @@ export class CheckoutService {
     private readonly smartRouting: SmartRoutingService,
   ) {}
 
-  async createSession(dto: CreateCheckoutSessionDto) {
+  async createSession(dto: CreateCheckoutSessionDto, merchantId: string) {
     // Generate a unique internal idempotency/reference key
     const reference = `ORD-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
 
@@ -51,6 +51,7 @@ export class CheckoutService {
         gateway: execution.gateway,
         customerEmail: dto.customerEmail,
         gatewayPaymentId: execution.result.gatewayPaymentId,
+        merchantId,
         status: 'PENDING',
       },
     });

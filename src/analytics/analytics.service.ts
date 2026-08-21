@@ -17,8 +17,13 @@ export class AnalyticsService {
 
   async getOverview(
     query: AnalyticsQueryDto = {},
+    merchantId?: string,
   ): Promise<AnalyticsOverviewResponse> {
     const whereClause: any = {};
+
+    if (merchantId) {
+      whereClause.merchantId = merchantId;
+    }
 
     if (query.from || query.to) {
       whereClause.createdAt = {};

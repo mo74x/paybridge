@@ -28,6 +28,32 @@ enum RefundStatus {
   FAILED
 }
 
+model Merchant {
+  id              String          @id @default(uuid()) @db.Uuid
+  name            String
+  email           String          @unique
+  webhookUrl      String?         // Per-merchant outbound webhook URL
+  webhookSecret   String?         // Per-merchant HMAC signing secret
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  apiKeys         ApiKey[]
+  paymentIntents  PaymentIntent[]
+}
+
+model ApiKey {
+  id          String    @id @default(uuid()) @db.Uuid
+  merchantId  String    @db.Uuid
+  keyHash     String    @unique       // SHA-256 hash of the full key
+  keyPrefix   String                  // e.g. "pb_live_...a1b2" for display
+  label       String?                 // "Production Key", "Test Key"
+  isActive    Boolean   @default(true)
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  merchant    Merchant  @relation(fields: [merchantId], references: [id])
+}
 
 model PaymentIntent {
   id               String          @id @default(uuid()) @db.Uuid
@@ -38,9 +64,11 @@ model PaymentIntent {
   gateway          GatewayProvider
   gatewayPaymentId String?         // The external ID returned from Stripe/Paymob
   customerEmail    String
+  merchantId       String          @db.Uuid
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
+  merchant         Merchant        @relation(fields: [merchantId], references: [id])
   events           WebhookEvent[]
   refunds          Refund[]
 }
@@ -54,6 +82,7 @@ model WebhookEvent {
 
   paymentIntent    PaymentIntent   @relation(fields: [paymentIntentId], references: [id])
 }
+
 model Refund {
   id               String          @id @default(uuid()) @db.Uuid
   paymentIntentId  String          @db.Uuid

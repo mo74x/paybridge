@@ -14,10 +14,12 @@ import { RefundsModule } from './refunds/refunds.module';
 import { RoutingModule } from './routing/routing.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { HealthModule } from './health/health.module';
+import { MerchantsModule } from './merchants/merchants.module';
 
 @Module({
   imports: [
     PrismaModule,
+    MerchantsModule,
     ProvidersModule,
     ResilienceModule,
     WebhooksModule,

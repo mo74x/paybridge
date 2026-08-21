@@ -6,9 +6,11 @@ import {
   HttpStatus,
   Param,
   Post,
+  Req,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { RefundsService } from './refunds.service';
 import { CreateRefundDto } from './dto/create-refund.dto';
 import { ApiKeyGuard } from '../common/auth/api-key.guard';
@@ -25,12 +27,17 @@ export class RefundsController {
   async createRefund(
     @Param('id') id: string,
     @Body() createRefundDto: CreateRefundDto,
+    @Req() req: Request,
   ) {
-    return this.refundsService.processRefund(id, createRefundDto);
+    return this.refundsService.processRefund(
+      id,
+      createRefundDto,
+      req.merchant!.id,
+    );
   }
 
   @Get(':id/refunds')
-  async getRefunds(@Param('id') id: string) {
-    return this.refundsService.getRefundsByIntentId(id);
+  async getRefunds(@Param('id') id: string, @Req() req: Request) {
+    return this.refundsService.getRefundsByIntentId(id, req.merchant!.id);
   }
 }

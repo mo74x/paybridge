@@ -1,7 +1,7 @@
 # PayBridge
 
 <p align="center">
-  <strong>Enterprise-Grade Multi-Gateway Payment Orchestration Engine</strong>
+  <strong>Enterprise-Grade Multi-Tenant Payment Orchestration Engine</strong>
 </p>
 
 <p align="center">
@@ -23,6 +23,7 @@
 - [Key Features](#key-features)
 - [Architecture & Design Patterns](#architecture--design-patterns)
   - [System Architecture](#system-architecture)
+  - [Multi-Tenant Merchant & API Key Lifecycle](#multi-tenant-merchant--api-key-lifecycle)
   - [Payment Checkout Flow](#payment-checkout-flow)
   - [Inbound & Outbound Webhook Lifecycle](#inbound--outbound-webhook-lifecycle)
   - [Resilience & Circuit Breaker](#resilience--circuit-breaker)
@@ -35,7 +36,8 @@
   - [Database Setup & Migrations](#database-setup--migrations)
   - [Running the Application](#running-the-application)
 - [API Reference](#api-reference)
-  - [Authentication](#authentication)
+  - [Authentication & Access Control](#authentication--access-control)
+  - [Merchant Management (Admin API)](#merchant-management-admin-api)
   - [Checkout & Payments](#checkout--payments)
   - [Refunds](#refunds)
   - [Inbound Webhooks](#inbound-webhooks)
@@ -51,44 +53,50 @@
 
 ## Overview
 
-**PayBridge** is a high-availability, multi-provider payment orchestrator built with **NestJS**, **TypeScript**, **PostgreSQL**, and **Redis**. It provides a single unified API to route, execute, monitor, and reconcile transactions across disparate payment service providers (**Stripe**, **Paymob**, **Fawry**, and beyond).
+**PayBridge** is a high-availability, multi-tenant payment orchestration engine built with **NestJS**, **TypeScript**, **PostgreSQL**, and **Redis**. It provides a unified API to route, execute, monitor, reconcile, and refund transactions across disparate payment service providers (**Stripe**, **Paymob**, **Fawry**, and more).
 
-PayBridge eliminates vendor lock-in, shields applications from payment gateway downtime with circuit breakers and dynamic fallback routing, enforces strict database-level idempotency to prevent double-charging, and guarantees reliable merchant notifications via resilient BullMQ message queues.
+Designed as an enterprise core banking & fintech bridge, PayBridge eliminates vendor lock-in, shields downstream systems from gateway downtime via circuit breakers and dynamic fallback routing, enforces strict database-level idempotency to eliminate duplicate charges, provides multi-tenant merchant isolation with cryptographically secure API keys, and guarantees reliable merchant notifications via resilient BullMQ message queues.
 
 ---
 
 ## Key Features
 
-- **Multi-Gateway Strategy Pattern**: Plug-and-play architecture supporting **Stripe** (global cards & APMs), **Paymob** (MENA cards & digital wallets), and **Fawry** (Egyptian cash/reference numbers).
+- **Multi-Tenant Merchant Architecture**:
+  - Full data and operational isolation across distinct merchants.
+  - Per-merchant outbound webhook endpoints and dedicated HMAC signing secrets.
+  - Granular API key management: SHA-256 hashed storage, masked prefix display (`pb_live_...`), instant rotation, deactivation, and background `lastUsedAt` tracking.
+  - Administrative control plane protected by master credentials (`AdminGuard`).
+- **Multi-Gateway Strategy Pattern**:
+  - Unified driver interface for **Stripe** (global credit/debit cards & APMs), **Paymob** (MENA cards & digital wallets), and **Fawry** (Egyptian cash reference codes).
 - **Smart Dynamic Routing**:
-  - `CURRENCY_OPTIMIZED`: Directs local currencies (`EGP`, `SAR`, `AED`, `USD`, `EUR`) to their optimal regional providers.
-  - `FEE_OPTIMIZED`: Routes micro-transactions and high-volume payments to lowest-cost interchange channels.
-  - `LOWEST_LATENCY`: Prioritizes nearest regional endpoints.
-  - **Health-Aware Fallbacks**: Dynamically skips degraded or failing gateways in the candidate fallback chain.
+  - `CURRENCY_OPTIMIZED`: Directs transactions to optimal regional providers based on currency (`EGP`, `SAR`, `AED`, `USD`, `EUR`).
+  - `FEE_OPTIMIZED`: Directs micro-transactions and high-volume payments to lowest-cost interchange channels.
+  - `LOWEST_LATENCY`: Prioritizes nearest regional endpoints for lower processing latency.
+  - **Health-Aware Fallback**: Automatically bypasses degraded or unhealthy gateways in the fallback chain.
 - **Circuit Breaker Fault Tolerance (Opossum)**:
-  - Gateway-isolated circuit breakers monitor error rates, response timeouts, and thresholds.
-  - Fails fast on degraded gateways, preventing cascading timeouts and system exhaustion.
-  - Automatically tests gateway health recovery via `HALF_OPEN` probe requests.
+  - Isolated circuit breakers per gateway provider monitor error rates, failure thresholds, and timeouts.
+  - Fails fast on degraded gateways to prevent thread pool exhaustion and cascading latency.
+  - Automatically probes gateway health recovery via `HALF_OPEN` trial requests.
 - **Strict Idempotency Layer**:
-  - Header-driven (`Idempotency-Key`) interceptor persisted in PostgreSQL.
-  - Protects against duplicate checkout requests and concurrent in-flight submissions (`409 Conflict`).
-  - Seamlessly replays cached responses (`x-idempotent-replay: true`).
+  - Header-driven (`Idempotency-Key`) interceptor persisted directly in PostgreSQL.
+  - Rejects concurrent duplicate in-flight requests (`409 Conflict`).
+  - Safely replays stored responses for previously processed idempotency keys (`x-idempotent-replay: true`).
 - **Cryptographic Webhook Ingestion & Anti-Replay**:
-  - Validates provider HMAC signatures against unparsed raw body buffers.
-  - Transactional event ledger (`WebhookEvent`) with database unique constraints prevents replay attacks.
+  - Ingests and verifies provider HMAC signatures against raw, unparsed payload buffers.
+  - Transactional event ledger (`WebhookEvent`) with database unique constraints eliminates replay attacks.
 - **Reliable Outbound Webhooks (BullMQ + Redis)**:
-  - Asynchronous background dispatch of lifecycle events (`payment.succeeded`, `payment.failed`, `refund.processed`).
+  - Background asynchronous dispatch of lifecycle events (`payment.succeeded`, `payment.failed`, `refund.processed`).
   - Exponential backoff retry policy (5 attempts: 2s, 4s, 8s, 16s, 32s).
-  - HMAC-SHA256 payload signing (`x-paybridge-signature`) for merchant authenticity.
+  - Merchant-specific HMAC-SHA256 payload signing (`x-paybridge-signature`, `x-paybridge-timestamp`).
 - **Automated Transaction Reconciliation**:
-  - Background worker and on-demand trigger to resolve abandoned or zombie `PENDING` transactions.
-  - Polls provider upstream APIs and broadcasts compensating outbound webhooks for dropped events.
+  - Scheduled background worker and on-demand trigger to reconcile abandoned or zombie `PENDING` transactions.
+  - Directly queries upstream provider APIs and triggers compensating outbound merchant events for lost inbound webhooks.
 - **Full & Partial Refunds Engine**:
-  - Unified refund initiation and status tracking across all integrated providers.
+  - Tenant-scoped refund processing and audit tracking across integrated providers.
 - **Observability & Analytics**:
-  - Prometheus-compatible `/metrics` endpoint (process memory, circuit breaker states, volume by currency, gateway counters).
-  - Production-ready `/health` health checks for database, Redis, and payment providers.
-  - Comprehensive analytics aggregation API with conversion and success rate metrics.
+  - Prometheus-compatible `/metrics` endpoint (memory usage, circuit breaker states, volume by currency, gateway counters).
+  - Production `/health` readiness and liveness checks for database, Redis, and providers.
+  - Per-merchant analytics overview with conversion, volume, failure rate, and gateway breakdowns.
 
 ---
 
@@ -100,8 +108,14 @@ PayBridge eliminates vendor lock-in, shields applications from payment gateway d
 graph TD
     Client["Client / Frontend / Merchant App"] -->|HTTPS + API Key| Gateway["PayBridge API Gateway (NestJS)"]
     
+    subgraph Security ["Authentication & Protection Layer"]
+        AdminGuard["Admin Guard (DEV_MASTER_API_KEY)"]
+        ApiKeyGuard["Merchant API Key Guard (SHA-256)"]
+        Idemp["Idempotency Interceptor (PostgreSQL)"]
+    end
+
     subgraph Core ["PayBridge Core Engine"]
-        Guard["API Key Guard & Idempotency Interceptor"]
+        Merchants["Merchants & API Key Service"]
         Router["Smart Routing Engine"]
         Breaker["Circuit Breaker Service (Opossum)"]
         Orchestrator["Payment Provider Orchestrator"]
@@ -126,8 +140,9 @@ graph TD
         ReconCron["Reconciliation Worker"]
     end
 
-    Client --> Guard
-    Guard --> Router
+    Gateway --> Security
+    Security --> Core
+    
     Router --> Breaker
     Breaker --> Orchestrator
     Orchestrator --> Stripe
@@ -150,6 +165,34 @@ graph TD
 
 ---
 
+### Multi-Tenant Merchant & API Key Lifecycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin as System Administrator
+    actor Merchant as Merchant System
+    participant API as PayBridge API
+    participant MService as Merchants Service
+    participant DB as PostgreSQL (Prisma)
+    
+    Admin->>API: POST /api/v1/merchants (Master API Key)
+    API->>MService: createMerchant({ name, email, webhookUrl })
+    MService->>MService: Generate API Key (pb_live_...) & SHA-256 Hash
+    MService->>DB: Save Merchant & Hashed ApiKey
+    MService-->>Admin: 201 Created (Full API Key returned once)
+    
+    Merchant->>API: POST /api/v1/checkout/session (x-api-key: pb_live_...)
+    API->>MService: findMerchantByApiKey(rawKey)
+    MService->>DB: Query ApiKey by SHA-256 hash
+    DB-->>MService: Return Merchant Entity
+    MService->>DB: Background update lastUsedAt
+    API->>API: Scope execution to Merchant ID
+    API-->>Merchant: 201 Created (Tenant-scoped PaymentIntent)
+```
+
+---
+
 ### Payment Checkout Flow
 
 ```mermaid
@@ -157,23 +200,26 @@ sequenceDiagram
     autonumber
     actor Merchant as Merchant / Client
     participant Controller as Checkout Controller
+    participant Auth as ApiKeyGuard
     participant Idemp as Idempotency Interceptor
     participant Router as Smart Routing Service
     participant Breaker as Circuit Breaker Service
     participant Provider as Payment Gateway (Stripe/Paymob)
     participant DB as PostgreSQL (Prisma)
 
-    Merchant->>Controller: POST /api/v1/checkout/session (Idempotency-Key)
+    Merchant->>Controller: POST /api/v1/checkout/session (x-api-key, Idempotency-Key)
+    Controller->>Auth: Validate API Key & attach Merchant context
+    Auth-->>Controller: Merchant Verified (merchantId)
     Controller->>Idemp: Validate & Reserve Idempotency Key
     Idemp->>DB: Check / Insert Idempotency Key
     Controller->>Router: resolveRoute({ amount, currency, strategy })
-    Router->>Breaker: Check provider availability
+    Router->>Breaker: Check provider health status
     Router-->>Controller: Return candidate fallback chain
     Controller->>Breaker: fire(selectedGateway, createIntent)
     Breaker->>Provider: Create Payment Intent
     Provider-->>Breaker: Success (gatewayPaymentId, clientSecret)
     Breaker-->>Controller: Return Payment Intent Result
-    Controller->>DB: Save PaymentIntent (PENDING)
+    Controller->>DB: Save PaymentIntent (PENDING, merchantId)
     Controller->>DB: Cache response against Idempotency Key
     Controller-->>Merchant: 201 Created (intentId, reference, clientSecret)
 ```
@@ -191,7 +237,7 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant BullMQ as BullMQ Queue (Redis)
     participant Worker as Webhook Dispatcher Worker
-    participant Merchant as Merchant Server
+    participant Merchant as Merchant Webhook Server
 
     Gateway->>WebhookCtrl: POST /api/v1/webhooks/:gateway (Signature Header)
     WebhookCtrl->>Provider: verifyWebhookSignature(rawBody, signature)
@@ -202,9 +248,10 @@ sequenceDiagram
         alt Duplicate Event (P2002 Unique Constraint)
             WebhookCtrl-->>Gateway: 200 OK (Duplicate ignored)
         else Fresh Event
-            WebhookCtrl->>BullMQ: Enqueue Outbound Webhook Job (attempts=5)
+            WebhookCtrl->>BullMQ: Enqueue Outbound Webhook Job (merchantId, attempts=5)
             WebhookCtrl-->>Gateway: 200 OK { received: true }
             BullMQ->>Worker: Consume Job
+            Worker->>DB: Lookup Merchant webhookUrl & webhookSecret
             Worker->>Worker: Generate HMAC Signature (x-paybridge-signature)
             Worker->>Merchant: POST Merchant Webhook URL
             alt Delivery Failed
@@ -244,11 +291,11 @@ stateDiagram-v2
 | **Framework** | [NestJS](https://nestjs.com/) | `v11.x` | Enterprise TypeScript server framework |
 | **Language** | [TypeScript](https://www.typescriptlang.org/) | `v5.x` | Strongly-typed JavaScript execution |
 | **ORM** | [Prisma ORM](https://www.prisma.io/) | `v7.x` | Type-safe database queries, schema & migrations |
-| **Database** | [PostgreSQL](https://www.postgresql.org/) | `16-alpine` | ACID-compliant relational data store |
+| **Database** | [PostgreSQL](https://www.postgresql.org/) | `16-alpine` | Multi-tenant ACID relational data store |
 | **Job Queue & Cache** | [Redis](https://redis.io/) / [BullMQ](https://docs.bullmq.io/) | `v7.x` / `v6.x` | Distributed asynchronous task queues & retries |
 | **Resilience** | [Opossum](https://nodeshift.dev/opossum/) | `v10.x` | Circuit Breaker implementation |
 | **Validation** | [class-validator](https://github.com/typestack/class-validator) | `v0.15.x` | DTO validation and input sanitization |
-| **Testing** | [Jest](https://jestjs.io/) / Supertest | `v30.x` | Comprehensive unit and integration test suite |
+| **Testing** | [Jest](https://jestjs.io/) / Supertest | `v30.x` | Unit and integration test suite |
 | **Containers** | [Docker](https://www.docker.com/) & Docker Compose | `v3.8` | Containerized PostgreSQL and Redis services |
 
 ---
@@ -257,12 +304,12 @@ stateDiagram-v2
 
 ```
 paybridge/
-├── .agents/                      # Agent workflows & custom skills
+├── .agents/                      # Custom skills & agent workflows
 ├── prisma/
-│   └── schema.prisma             # PostgreSQL schema definitions
+│   └── schema.prisma             # PostgreSQL multi-tenant schema
 ├── src/
-│   ├── analytics/                # Volume, conversion & gateway metrics
-│   │   ├── dto/                  # Analytics query filters
+│   ├── analytics/                # Multi-tenant analytics & aggregations
+│   │   ├── dto/                  # Query filters (date range, gateway)
 │   │   ├── analytics.controller.ts
 │   │   ├── analytics.service.ts
 │   │   └── analytics.types.ts
@@ -270,14 +317,19 @@ paybridge/
 │   │   ├── dto/                  # CreateCheckoutSessionDto
 │   │   ├── checkout.controller.ts
 │   │   └── checkout.service.ts
-│   ├── common/                   # Cross-cutting concerns & middleware
-│   │   ├── auth/                 # API Key authentication guard
+│   ├── common/                   # Cross-cutting infrastructure
+│   │   ├── auth/                 # AdminGuard & ApiKeyGuard
 │   │   ├── idempotency/          # Database-backed idempotency interceptor
 │   │   └── resilience/           # Opossum circuit breaker service
 │   ├── health/                   # Liveness, readiness & Prometheus metrics
 │   │   ├── health.controller.ts
 │   │   ├── health.service.ts
 │   │   └── metrics.service.ts
+│   ├── merchants/                # Multi-tenant merchant & API key domain
+│   │   ├── dto/                  # CreateMerchantDto, UpdateMerchantDto
+│   │   ├── merchants.controller.ts
+│   │   ├── merchants.module.ts
+│   │   └── merchants.service.ts
 │   ├── outbound-webhooks/        # BullMQ queue & background worker
 │   │   ├── interfaces/           # Webhook payload & job interfaces
 │   │   ├── outbound-webhooks.processor.ts
@@ -305,7 +357,7 @@ paybridge/
 │   │   ├── webhooks.controller.ts
 │   │   └── webhooks.module.ts
 │   ├── app.module.ts             # Root application module
-│   └── main.ts                   # Application entrypoint & raw-body config
+│   └── main.ts                   # Application bootstrap & raw body config
 ├── test/                         # End-to-end (e2e) tests
 ├── docker-compose.yml            # Local PostgreSQL & Redis infrastructure
 ├── package.json
@@ -357,14 +409,22 @@ DATABASE_URL="postgresql://pb_user:pb_password@localhost:5432/paybridge_db?schem
 REDIS_HOST="localhost"
 REDIS_PORT="6379"
 
-# Merchant Webhook Settings
+# System Administrator Key (for Merchant Management API)
+DEV_MASTER_API_KEY="pb_master_admin_secret_key_998877"
+
+# Default Merchant Webhook Settings (Fallback)
 MERCHANT_WEBHOOK_URL="http://localhost:4000/webhook"
 WEBHOOK_SIGNING_SECRET="pb_whsec_dev_secret_key_12345"
 
-# Security
-DEV_MASTER_API_KEY="pb_test_live_key_998877"
+# Gateway Sandbox API Keys
+STRIPE_SECRET_KEY="sk_test_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."
+PAYMOB_API_KEY="..."
+PAYMOB_HMAC_SECRET="..."
+FAWRY_MERCHANT_CODE="..."
+FAWRY_SECURITY_KEY="..."
 
-# Idempotency & Reconciliation
+# Idempotency & Reconciliation Configuration
 IDEMPOTENCY_TTL_SECONDS="86400"
 RECONCILIATION_INTERVAL_MS="900000"
 RECONCILIATION_THRESHOLD_MINUTES="15"
@@ -379,12 +439,14 @@ RECONCILIATION_THRESHOLD_MINUTES="15"
    npx prisma generate
    ```
 
-2. **Run database migrations:**
+2. **Run database migrations or synchronize schema:**
    ```bash
    npx prisma migrate dev --name init
+   # Or for fast local sync:
+   npx prisma db push
    ```
 
-3. *(Optional)* **Open Prisma Studio:**
+3. *(Optional)* **Inspect database with Prisma Studio:**
    ```bash
    npx prisma studio
    ```
@@ -408,30 +470,117 @@ The API will be available at: `http://localhost:3000`
 
 ## API Reference
 
-All protected endpoints require an API Key supplied via header:
-- `x-api-key: <YOUR_API_KEY>` or
-- `Authorization: Bearer <YOUR_API_KEY>`
+### Authentication & Access Control
+
+PayBridge uses a dual-tier authentication architecture:
+
+| Tier | Guard | Header | Target Endpoints |
+| :--- | :--- | :--- | :--- |
+| **System Admin** | `AdminGuard` | `x-api-key: <DEV_MASTER_API_KEY>` | `/api/v1/merchants/**` |
+| **Merchant** | `ApiKeyGuard` | `x-api-key: <pb_live_...>` or `Authorization: Bearer <pb_live_...>` | `/api/v1/checkout/**`, `/api/v1/payments/**`, `/api/v1/analytics/**` |
 
 ---
 
-### Authentication
+### Merchant Management (Admin API)
 
-| Header | Description | Default Dev Key |
-| :--- | :--- | :--- |
-| `x-api-key` | API Key provided to authorized merchants | `pb_test_live_key_998877` |
-| `Authorization` | Bearer token format | `Bearer pb_test_live_key_998877` |
+Guarded by `AdminGuard`. Use `DEV_MASTER_API_KEY`.
+
+#### 1. Create a Merchant
+- **Endpoint**: `POST /api/v1/merchants`
+- **Request Body:**
+  ```json
+  {
+    "name": "Acme Commerce Ltd.",
+    "email": "payments@acme.com",
+    "webhookUrl": "https://api.acme.com/webhooks/paybridge",
+    "webhookSecret": "whsec_custom_secret_key_9988",
+    "keyLabel": "Production API Key"
+  }
+  ```
+- **Response (`201 Created`):**
+  ```json
+  {
+    "merchant": {
+      "id": "a9dcc262-84eb-4f32-93fd-ed331ec8a68f",
+      "name": "Acme Commerce Ltd.",
+      "email": "payments@acme.com",
+      "webhookUrl": "https://api.acme.com/webhooks/paybridge",
+      "isActive": true,
+      "createdAt": "2026-08-21T20:42:00.000Z"
+    },
+    "apiKey": {
+      "id": "e2f1a34b-12cd-45ef-89ab-0123456789cd",
+      "key": "pb_live_9f83b271a04c5e6d7890123456789abcdef0123456789abcdef0123456789abc",
+      "prefix": "pb_live_...89abc",
+      "label": "Production API Key"
+    }
+  }
+  ```
+  > [!NOTE]
+  > The full raw API key is returned **only once** at creation time. The database only stores a cryptographic SHA-256 hash.
+
+#### 2. List Merchants
+- **Endpoint**: `GET /api/v1/merchants?page=1&limit=20`
+- **Response (`200 OK`):**
+  ```json
+  {
+    "data": [
+      {
+        "id": "a9dcc262-84eb-4f32-93fd-ed331ec8a68f",
+        "name": "Acme Commerce Ltd.",
+        "email": "payments@acme.com",
+        "isActive": true,
+        "createdAt": "2026-08-21T20:42:00.000Z",
+        "_count": {
+          "paymentIntents": 142
+        }
+      }
+    ],
+    "meta": {
+      "total": 1,
+      "page": 1,
+      "limit": 20,
+      "totalPages": 1
+    }
+  }
+  ```
+
+#### 3. Get Merchant Details
+- **Endpoint**: `GET /api/v1/merchants/:id`
+- **Response (`200 OK`):** Returns merchant metadata and active key prefixes (masked).
+
+#### 4. Update Merchant Settings
+- **Endpoint**: `PATCH /api/v1/merchants/:id`
+- **Request Body:**
+  ```json
+  {
+    "webhookUrl": "https://new-api.acme.com/webhooks",
+    "isActive": true
+  }
+  ```
+
+#### 5. Generate / Rotate API Key
+- **Endpoint**: `POST /api/v1/merchants/:id/keys`
+- **Request Body:** `{ "label": "Secondary Backup Key" }`
+- **Response (`201 Created`):** Returns the newly created full API key.
+
+#### 6. Revoke API Key
+- **Endpoint**: `DELETE /api/v1/merchants/:id/keys/:keyId`
+- **Response (`200 OK`):** `{ "revoked": true, "keyId": "e2f1a34b-12cd-45ef-89ab-0123456789cd" }`
 
 ---
 
 ### Checkout & Payments
 
+Guarded by `ApiKeyGuard`. Scoped automatically to the authenticated merchant.
+
 #### 1. Create Checkout Session
-Initiates a payment intent, resolves the best gateway candidate chain via the Smart Routing Engine, creates the intent with circuit breaker protection, and returns client credentials.
+Initiates a payment intent, resolves the optimal gateway candidate chain via the Smart Routing Engine, creates the intent with circuit breaker protection, and returns client credentials.
 
 - **Endpoint**: `POST /api/v1/checkout/session`
 - **Headers**:
   - `Content-Type: application/json`
-  - `x-api-key: pb_test_live_key_998877`
+  - `x-api-key: pb_live_...`
   - `Idempotency-Key: <unique-request-id>` *(Recommended)*
 
 **Request Body:**
@@ -446,10 +595,10 @@ Initiates a payment intent, resolves the best gateway candidate chain via the Sm
 }
 ```
 
-**Routing Strategies Available**:
-- `CURRENCY_OPTIMIZED` *(Default)*
-- `FEE_OPTIMIZED`
-- `LOWEST_LATENCY`
+**Routing Strategies:**
+- `CURRENCY_OPTIMIZED` *(Default)*: Routes based on currency origin (`EGP` -> Paymob/Fawry, `USD`/`EUR` -> Stripe).
+- `FEE_OPTIMIZED`: Prioritizes lowest interchange processing fees.
+- `LOWEST_LATENCY`: Prioritizes lowest network latency endpoints.
 
 **Response (`201 Created`):**
 ```json
@@ -465,8 +614,10 @@ Initiates a payment intent, resolves the best gateway candidate chain via the Sm
 
 ### Refunds
 
+Guarded by `ApiKeyGuard`.
+
 #### 1. Process a Refund
-Issues a full or partial refund for a captured payment intent.
+Issues a full or partial refund for a captured payment intent owned by the merchant.
 
 - **Endpoint**: `POST /api/v1/payments/:id/refund`
 - **Headers**: `x-api-key`, `Idempotency-Key` *(Optional)*
@@ -475,7 +626,7 @@ Issues a full or partial refund for a captured payment intent.
 ```json
 {
   "amount": 100.00,
-  "reason": "Customer requested order cancellation"
+  "reason": "Customer requested item cancellation"
 }
 ```
 
@@ -499,10 +650,10 @@ Issues a full or partial refund for a captured payment intent.
     "id": "5c1f9b31-3c72-4d69-b59a-241c28c8942b",
     "paymentIntentId": "d7a46e5a-8b89-4a7b-a25e-049e755a9b71",
     "amount": "100.00",
-    "reason": "Customer requested order cancellation",
+    "reason": "Customer requested item cancellation",
     "status": "SUCCEEDED",
     "gatewayRefundId": "re_stripe_1724000000000",
-    "createdAt": "2026-08-18T20:30:00.000Z"
+    "createdAt": "2026-08-21T20:30:00.000Z"
   }
 ]
 ```
@@ -511,28 +662,13 @@ Issues a full or partial refund for a captured payment intent.
 
 ### Inbound Webhooks
 
-Used by payment providers to notify PayBridge of transaction status updates.
+Used by payment providers to notify PayBridge of transaction updates.
 
 - **Endpoint**: `POST /api/v1/webhooks/:gateway`
-- **Supported Gateway Parameters**: `stripe`, `paymob`, `fawry`
+- **Supported Providers**: `stripe`, `paymob`, `fawry`
 - **Headers**:
-  - For Stripe: `stripe-signature: <signature>`
-  - For Paymob / Fawry: `hmac: <signature>`
-
-**Stripe Example Payload:**
-```json
-{
-  "id": "evt_test_12345",
-  "type": "payment_intent.succeeded",
-  "data": {
-    "object": {
-      "id": "d7a46e5a-8b89-4a7b-a25e-049e755a9b71",
-      "amount": 25000,
-      "currency": "usd"
-    }
-  }
-}
-```
+  - Stripe: `stripe-signature: <signature>`
+  - Paymob / Fawry: `hmac: <signature>`
 
 ---
 
@@ -550,13 +686,15 @@ Scans for stale `PENDING` transactions older than `RECONCILIATION_THRESHOLD_MINU
   "failed": 1,
   "unchanged": 8,
   "errors": [],
-  "executedAt": "2026-08-18T20:35:00.000Z"
+  "executedAt": "2026-08-21T20:35:00.000Z"
 }
 ```
 
 ---
 
 ### Analytics
+
+Guarded by `ApiKeyGuard`. Scopes metrics directly to the authenticated merchant.
 
 #### 1. Get Transaction Overview
 Returns aggregate volume, conversion rates, currency breakdowns, gateway metrics, and refund figures.
@@ -635,26 +773,26 @@ Returns aggregate volume, conversion rates, currency breakdowns, gateway metrics
 
 ### Health & Metrics
 
-| Endpoint | Method | Output | Description |
+| Endpoint | Method | Format | Description |
 | :--- | :--- | :--- | :--- |
 | `/health` | `GET` | JSON | Overall system status, database connectivity & Redis health |
-| `/metrics` | `GET` | Prometheus Text | Prometheus metrics (memory, uptime, circuit breakers, volumes) |
+| `/metrics` | `GET` | Prometheus Text | Prometheus metrics (process memory, circuit breaker status, volumes) |
 
 ---
 
 ## Merchant Webhook Verification
 
-Outbound webhooks sent from PayBridge to your merchant server include HMAC-SHA256 signature headers to guarantee authenticity and prevent replay attacks:
+Outbound webhooks dispatched by PayBridge to merchant servers include HMAC-SHA256 signature headers generated using the merchant's private `webhookSecret`:
 
 - `x-paybridge-signature`: `t=<timestamp>,v1=<signature>`
 - `x-paybridge-timestamp`: `<timestamp>`
 
-### Node.js Verification Example
+### Node.js / TypeScript Verification Example
 
 ```typescript
 import * as crypto from 'crypto';
 
-function verifyPaybridgeSignature(
+export function verifyPaybridgeSignature(
   rawPayload: string,
   signatureHeader: string,
   secret: string,
@@ -673,7 +811,7 @@ function verifyPaybridgeSignature(
   // 2. Prevent replay attacks (check timestamp drift)
   const now = Math.floor(Date.now() / 1000);
   if (Math.abs(now - timestamp) > toleranceSeconds) {
-    return false; // Timestamp out of tolerance
+    return false; // Timestamp outside acceptable tolerance window
   }
 
   // 3. Compute expected HMAC
@@ -722,9 +860,10 @@ npm run test:e2e
 - [x] BullMQ outbound webhook queues with exponential backoff
 - [x] Automated transaction reconciliation
 - [x] Full & partial refunds
+- [x] Multi-tenant merchant architecture with SHA-256 API key isolation
 - [x] Prometheus metrics & health checks
 - [ ] Apple Pay & Google Pay direct session pass-through
-- [ ] Multi-tenant merchant account segregation & portal
+- [ ] Merchant self-service web dashboard & analytics portal
 - [ ] 3D-Secure 2.0 frictionless authentication flows
 
 ---
